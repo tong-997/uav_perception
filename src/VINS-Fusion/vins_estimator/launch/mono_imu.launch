@@ -1,0 +1,43 @@
+<launch>
+  <!-- ============ 相机参数（按需改） ============ -->
+  <arg name="video_device" default="/dev/video24"/>
+  <arg name="width"  default="640"/>
+  <arg name="height" default="480"/>
+  <arg name="fps"    default="30"/>
+
+  <!-- ============ 话题命名 ============ -->
+  <!-- VINS 建议的图像与 IMU 话题（需与 mono_imu.yaml 一致） -->
+  <arg name="image_topic" default="/cam0/image_raw"/>
+  <arg name="imu_topic"   default="/mavros/imu/data_raw"/>
+
+  <!-- ============ 启动相机（usb_cam） ============ -->
+  <!-- 如果没装： sudo apt install -y ros-noetic-usb-cam v4l-utils -->
+  <node pkg="usb_cam" type="usb_cam_node" name="cam0" output="screen">
+    <param name="video_device"  value="$(arg video_device)"/>
+    <param name="image_width"   value="$(arg width)"/>
+    <param name="image_height"  value="$(arg height)"/>
+    <param name="framerate"     value="$(arg fps)"/>
+    <!-- 常见免驱 UVC 支持 MJPG；若不支持，请把 mjpeg 改成 yuyv -->
+    <param name="pixel_format"  value="mjpeg"/>
+    <remap from="image_raw" to="$(arg image_topic)"/>
+  </node>
+
+  <!-- ============ 启动 VINS-Fusion 单目+IMU ============ -->
+  <!-- 可执行名以你工程为准：你构建出了 vins_node -->
+  <node pkg="vins" type="vins_node" name="vins_mono_imu" output="screen">
+    <param name="config_file" value="$(find vins)/config/mono_imu.yaml"/>
+  </node>
+
+  <!-- ============ （可选）规划链路：包含 TF 与pos_cmd ============ -->
+  <!-- 如果你已经有自己的 ego_cloud.launch，可直接 include 并把里程计改成 /vins_fusion/odometry -->
+  <!-- 需要时取消注释
+  <include file="$(find ego_planner)/launch/ego_cloud.launch">
+    <arg name="drone_id"          value="0"/>
+    <arg name="odom_topic"        value="/vins_fusion/odometry"/>
+    <arg name="camera_pose_topic" value="/ego/camera_pose_ps"/>
+    <arg name="cloud_topic"       value="/ego/points"/>
+    <arg name="depth_topic"       value="/ego/depth_image"/>
+    <arg name="poscmd_topic"      value="/drone_0_planning/pos_cmd"/>
+  </include>
+  -->
+</launch>

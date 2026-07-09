@@ -1,0 +1,25 @@
+<launch>
+  <!-- RKNN + CSRT 跟踪 -->
+  <node pkg="human_follow_rknn" type="human_tracker_node" name="human_tracker"
+        output="screen">
+    <param name="camera_index" value="0"/>
+    <param name="width"        value="640"/>
+    <param name="height"       value="480"/>
+    <param name="fps"          value="30"/>
+    <param name="model_path"   value="$(find human_follow_rknn)/../../model/yolov5n_rk3588.rknn"/>
+    <param name="person_class_id" value="0"/>
+    <param name="miss_patience" value="20"/>
+  </node>
+
+  <!-- 人跟随控制（输出 /position_cmd 给 px4ctrl） -->
+  <node pkg="human_follow_rknn" type="human_follow_px4ctrl_node" name="human_follow_ctrl"
+        output="screen">
+    <param name="k_yaw"          value="0.8"/>
+    <param name="k_v"            value="2.0"/>
+    <param name="desired_h_norm" value="0.3"/>
+    <param name="follow_height"  value="3.0"/>
+    <param name="v_max"          value="2.0"/>
+    <param name="yaw_rate_max"   value="0.8"/>
+    <param name="xy_bound"       value="10.0"/>
+  </node>
+</launch>

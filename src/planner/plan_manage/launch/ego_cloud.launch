@@ -1,0 +1,75 @@
+<launch>
+  <!-- 基本参数 -->
+  <arg name="drone_id"          default="0"/>
+  <arg name="odom_topic"        default="/vins/odometry"/>
+  <arg name="camera_pose_topic" default="/ego/camera_pose_ps"/>
+  <arg name="cloud_topic"       default="/ego/points"/>
+  <arg name="depth_topic"       default="/ego/depth_image"/>
+  <arg name="poscmd_topic"      default="/drone_0_planning/pos_cmd"/>
+
+  <!-- ① 启动规划（包含 remap/参数） -->
+  <include file="$(find ego_planner)/launch/advanced_param.launch">
+    <arg name="drone_id" value="$(arg drone_id)"/>
+    <arg name="name_of_ego_planner_node" value="ego_planner_$(arg drone_id)"/>
+    <arg name="odometry_topic" value="$(arg odom_topic)"/>
+    <arg name="camera_pose_topic" value="$(arg camera_pose_topic)"/>
+    <!-- 你现在两路都有：点云 & 深度；点云为主，深度可保留作备选 -->
+    <arg name="depth_topic" value="$(arg depth_topic)"/>
+    <arg name="cloud_topic" value="$(arg cloud_topic)"/>
+
+    <!-- 规划与运动学参数（按需调整） -->
+    <arg name="flight_type" value="2"/>
+    <arg name="planning_horizon" value="7.5"/>
+    <arg name="use_distinctive_trajs" value="true"/>
+    <arg name="max_vel" value="2.0"/>
+    <arg name="max_acc" value="6.0"/>
+
+    <!-- 地图尺寸（栅格局部地图大小） -->
+    <arg name="map_size_x_" value="50.0"/>
+    <arg name="map_size_y_" value="25.0"/>
+    <arg name="map_size_z_" value="2.0"/>
+
+    <!-- 相机内参（与深度估计节点一致） -->
+    <arg name="fx" value="391.50625"/>
+    <arg name="fy" value="395.18355"/>
+    <arg name="cx" value="335.18186"/>
+    <arg name="cy" value="217.7217"/>
+  </include>
+
+  <!-- ② TF 广播：输出 /ego/camera_pose_ps -->
+  <node pkg="ego_planner" type="ego_tf_broadcaster.py" name="ego_tf_broadcaster" output="screen">
+    <param name="odom_topic"            value="$(arg odom_topic)"/>
+    <param name="world_frame"           value="world"/>
+    <param name="publish_world_tf"      value="true"/>
+    <param name="zero_on_first"         value="true"/>
+    <param name="base_frame"            value="base_link"/>
+    <param name="camera_frame"          value="default_cam"/>
+    <param name="camera_optical_frame"  value="default_cam_optical"/>
+    <param name="publish_camera_pose"   value="true"/>
+    <param name="camera_pose_topic_out" value="$(arg camera_pose_topic)"/>
+    <param name="cam_tx" value="0.09"/>
+    <param name="cam_ty" value="0.0"/>
+    <param name="cam_tz" value="-0.02"/>
+    <param name="cam_roll_deg"  value="0.0"/>
+    <param name="cam_pitch_deg" value="0.0"/>
+    <param name="cam_yaw_deg"   value="0.0"/>
+  </node>
+
+  <!-- ③ 真实深度/点云节点（如用你的 RKNN 深度） -->
+  <node pkg="ego_depth_fused" type="ego_depth_fused_node" name="ego_depth_fused_node" output="screen">
+    <param name="image_topic" value="/camera640/image_raw"/>  <!-- 改成你的相机话题 -->
+    <param name="odom_topic"  value="$(arg odom_topic)"/>
+    <param name="frame_id"    value="default_cam_optical"/>
+    <param name="cloud_stride" value="4"/>
+    <param name="max_depth_m"  value="40.0"/>
+  </node>
+
+  <!-- ④ 轨迹服务器：把 bspline 转 position_cmd；统一输出到 /drone_<id>_planning/pos_cmd -->
+  <node pkg="ego_planner" type="traj_server" name="drone_$(arg drone_id)_traj_server" output="screen">
+    <remap from="planning/bspline" to="/drone_$(arg drone_id)_planning/bspline"/>
+    <remap from="position_cmd"     to="$(arg poscmd_topic)"/>
+    <param name="traj_server/time_forward" value="1.0"/>
+  </node>
+
+  <!-- 提示：控制环节请在你的控制包里完成把 $(arg poscmd_topic) → MAVROS/px4ctrl 的映射 -->
+</launch>

@@ -1,0 +1,54 @@
+%YAML:1.0
+
+# ===== 基本形态 =====
+imu: 1
+num_of_cam: 1
+
+imu_topic: "/mavros/imu/data"
+image0_topic: "/cam640/image_raw"
+
+output_path: "/home/comb/vins_output"
+cam0_calib: "cam0.yaml"
+image_width: 640
+image_height: 480
+
+# ===== 特征跟踪 =====
+max_cnt: 200
+min_dist: 20
+freq: 0                 # 不限频，跟相机走
+F_threshold: 1.0
+show_track: 1           # 先开着调试
+equalize: 1
+fisheye: 0
+
+# ===== 前端/优化器 =====
+max_solver_time: 0.03
+max_num_iterations: 8
+keyframe_parallax: 10.0
+loop_closure: 0
+
+# ===== IMU-相机外参 =====
+# 强烈建议给一个“接近真实”的初值，而不是单位阵
+# 例：相机在机体前方 9cm、下方 2cm，姿态近似平行
+estimate_extrinsic: 2   # 允许在线细调
+body_T_cam0:
+  !!opencv-matrix
+  rows: 4
+  cols: 4
+  dt: d
+  data: [ 1, 0, 0,  0.09,
+          0, 1, 0,  0.00,
+          0, 0, 1, -0.02,
+          0, 0, 0,  1.00]
+
+# ===== IMU 噪声（按你 50Hz）=====
+acc_n: 0.2
+gyr_n: 0.02
+acc_w: 0.002
+gyr_w: 0.002
+g_norm: 9.81
+
+# ===== 时间同步 =====
+estimate_td: 1
+td: 0.35
+

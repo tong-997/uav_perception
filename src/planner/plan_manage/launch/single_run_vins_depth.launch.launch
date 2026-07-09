@@ -1,0 +1,94 @@
+<launch>
+  <!-- ========== 可根据实际修改 ========== -->
+  <arg name="drone_id"      default="0"/>
+  <arg name="odom_topic"    default="/vins_mono_imu/odometry"/>   <!-- VINS 输出 -->
+  <arg name="image_topic"   default="/cam0/image_raw"/>           <!-- 相机图像 -->
+  <arg name="camera_pose_topic" default="/ego/camera_pose_ps"/>   <!-- 我们生成的相机位姿 -->
+
+  <!-- 相机内参（给你的深度节点 & EGO） -->
+  <arg name="fx" default="391.50625"/>
+  <arg name="fy" default="395.18355"/>
+  <arg name="cx" default="335.18186"/>
+  <arg name="cy" default="217.7217"/>
+
+  <!-- 机体->相机外参（m/deg），用于把 /vins odom 转换成 camera pose -->
+  <arg name="tbc_x" default="0.006"/>
+  <arg name="tbc_y" default="0.007"/>
+  <arg name="tbc_z" default="-0.010"/>
+  <arg name="tbc_roll_deg"  default="-176.0"/>
+  <arg name="tbc_pitch_deg" default="-20.0"/>
+  <arg name="tbc_yaw_deg"   default="72.0"/>
+
+  <!-- ========== 1) 把 VINS odom -> 相机 PoseStamped（不发布 TF！） ========== -->
+  <node pkg="ego_planner" type="odom_to_cam_pose.py" name="odom_to_cam_pose" output="screen">
+    <param name="odom_topic" value="$(arg odom_topic)"/>
+    <param name="camera_pose_topic_out" value="$(arg camera_pose_topic)"/>
+    <param name="tbc_x" value="$(arg tbc_x)"/>
+    <param name="tbc_y" value="$(arg tbc_y)"/>
+    <param name="tbc_z" value="$(arg tbc_z)"/>
+    <param name="tbc_roll_deg"  value="$(arg tbc_roll_deg)"/>
+    <param name="tbc_pitch_deg" value="$(arg tbc_pitch_deg)"/>
+    <param name="tbc_yaw_deg"   value="$(arg tbc_yaw_deg)"/>
+    <param name="publish_tf" value="false"/>  <!-- 关键：不发 TF -->
+  </node>
+
+  <!-- ========== 2) 你的“深度恢复”节点：输出 /ego/depth_image（EGO 使用它） ========== -->
+  <node pkg="ego_depth_fused" type="ego_depth_fused_node" name="ego_depth_fused_node" output="screen">
+    <param name="image_topic" value="$(arg image_topic)"/>
+    <param name="odom_topic"  value="$(arg odom_topic)"/>   <!-- 若你的节点用来做尺度/时序对齐 -->
+    <param name="fx" value="$(arg fx)"/><param name="fy" value="$(arg fy)"/>
+    <param name="cx" value="$(arg cx)"/><param name="cy" value="$(arg cy)"/>
+    <param name="cloud_stride" value="4"/>
+    <param name="max_depth_m"  value="30.0"/>
+    <param name="scale_window" value="15"/>
+    <!-- 只要让它发布 /ego/depth_image 即可；不需要点云、更不需要 TF -->
+  </node>
+
+  <!-- ========== 3) EGO Planner（跟官方一样的 include + 参数） ========== -->
+  <include file="$(find ego_planner)/launch/advanced_param_exp.xml">
+    <arg name="drone_id" value="$(arg drone_id)"/>
+
+    <!-- 地图尺寸 -->
+    <arg name="map_size_x_" value="100"/>
+    <arg name="map_size_y_" value="50"/>
+    <arg name="map_size_z_" value="3.0"/>
+
+    <!-- 里程计（机体位姿）；官方例子用 /vins_fusion/imu_propagate，你用 /vins_mono_imu/odometry 也行 -->
+    <arg name="odometry_topic" value="$(arg odom_topic)"/>
+
+    <!-- 用“深度 + 相机位姿”这条路线（不要再给 cloud_topic） -->
+    <arg name="camera_pose_topic" value="$(arg camera_pose_topic)"/>
+    <arg name="depth_topic" value="/ego/depth_image"/>
+    <arg name="cloud_topic" value="nouse"/>  <!-- 占位但不用 -->
+
+    <!-- 相机内参（有的版本 advanced_param_exp.xml 会用；没有也不影响） -->
+    <arg name="cx" value="$(arg cx)"/>
+    <arg name="cy" value="$(arg cy)"/>
+    <arg name="fx" value="$(arg fx)"/>
+    <arg name="fy" value="$(arg fy)"/>
+
+    <!-- 速度/加速度、规划范围 -->
+    <arg name="max_vel" value="0.5"/>
+    <arg name="max_acc" value="6.0"/>
+    <arg name="planning_horizon" value="6"/>
+    <arg name="use_distinctive_trajs" value="false"/>
+
+    <!-- ====== 关键：飞行模式 & waypoints ====== -->
+    <!-- 1: RViz 2D Nav Goal（按 G 点目标）;  2: 按下方全局航点飞 -->
+    <arg name="flight_type" value="1"/>
+
+    <!-- global waypoints（跟你贴的一样） -->
+    <arg name="point_num" value="5" />
+    <arg name="point0_x" value="15" /><arg name="point0_y" value="0"   /><arg name="point0_z" value="1" />
+    <arg name="point1_x" value="0.0"/><arg name="point1_y" value="0.0"/><arg name="point1_z" value="1.0"/>
+    <arg name="point2_x" value="15.0"/><arg name="point2_y" value="0.0"/><arg name="point2_z" value="1.0"/>
+    <arg name="point3_x" value="0.0"/><arg name="point3_y" value="0.0"/><arg name="point3_z" value="1.0"/>
+    <arg name="point4_x" value="15.0"/><arg name="point4_y" value="0.0"/><arg name="point4_z" value="1.0"/>
+  </include>
+
+  <!-- ========== 4) 轨迹 server（与官方一致） ========== -->
+  <node pkg="ego_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">
+    <remap from="~planning/bspline" to="drone_$(arg drone_id)_planning/bspline"/>
+    <param name="traj_server/time_forward" value="1.0" type="double"/>
+  </node>
+</launch>
